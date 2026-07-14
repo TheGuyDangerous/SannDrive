@@ -1,4 +1,5 @@
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:iconsax/iconsax.dart';
 
 import '../../shared/controllers/auth_controller.dart';
 import '../../shared/models/drive_item.dart';
+import '../../shared/services/upload/upload_queue.dart';
 import '../../theme/desktop_theme.dart';
 import 'drop_overlay.dart';
 import 'storage_view.dart';
@@ -142,6 +144,17 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
         _anchor = null;
       });
 
+  Future<void> _pickAndUpload() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (result == null) return;
+    final paths = [
+      for (final f in result.files)
+        if (f.path != null) f.path!
+    ];
+    if (paths.isEmpty) return;
+    ref.read(uploadQueueProvider.notifier).addFiles(paths);
+  }
+
   ColorScheme get _scheme =>
       (_dark ? DesktopTheme.dark : DesktopTheme.light).colorScheme;
 
@@ -238,6 +251,11 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(uploadQueueProvider, (prev, next) {
+      if (next.length > (prev?.length ?? 0) && !_uploadsVisible) {
+        setState(() => _uploadsVisible = true);
+      }
+    });
     return Theme(
       data: _dark ? DesktopTheme.dark : DesktopTheme.light,
       child: Builder(builder: (context) => _shell(context)),
@@ -256,9 +274,9 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
           onDragExited: (_) => setState(() => _dragging = false),
           onDragDone: (detail) {
             setState(() => _dragging = false);
-            for (final f in detail.files) {
-              debugPrint('drop: ${f.path}');
-            }
+            ref
+                .read(uploadQueueProvider.notifier)
+                .addFiles([for (final f in detail.files) f.path]);
           },
           child: Stack(
             children: [
@@ -489,7 +507,8 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
               ),
             ),
             menuChildren: [
-              _menuButton(scheme, Iconsax.document_upload, 'Upload files'),
+              _menuButton(scheme, Iconsax.document_upload, 'Upload files',
+                  onPressed: _pickAndUpload),
               _menuButton(scheme, Iconsax.folder_open, 'Upload folder'),
               _menuButton(scheme, Iconsax.folder_add, 'New folder'),
             ],
