@@ -43,6 +43,7 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.5
   file_picker: ^8.1.6
+  desktop_drop: ^0.4.4
   window_manager: ^0.4.3
   google_fonts: ^6.2.1
   iconsax: ^0.0.8
