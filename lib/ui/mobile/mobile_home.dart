@@ -1,13 +1,18 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax/iconsax.dart';
 
 import '../../shared/controllers/auth_controller.dart';
 import '../../shared/core/env.dart';
+import '../../shared/services/upload/upload_queue.dart';
 import '../../theme/app_theme.dart';
 import '../common/brand_mark.dart';
 import '../common/empty_state.dart';
 import '../common/section_card.dart';
+import '../common/upload_feedback.dart';
+import 'storage_page.dart';
+import 'upload_section.dart';
 
 class MobileHome extends ConsumerStatefulWidget {
   const MobileHome({super.key});
@@ -79,24 +84,67 @@ class _TabScaffold extends StatelessWidget {
   }
 }
 
-class _DriveTab extends StatelessWidget {
+class _DriveTab extends ConsumerStatefulWidget {
   const _DriveTab();
 
   @override
+  ConsumerState<_DriveTab> createState() => _DriveTabState();
+}
+
+class _DriveTabState extends ConsumerState<_DriveTab> {
+  String? _pickError;
+
+  Future<void> _pickAndUpload() async {
+    setState(() => _pickError = null);
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+      if (result == null) return;
+      final paths = [
+        for (final f in result.files)
+          if (f.path != null) f.path!
+      ];
+      if (paths.isEmpty) return;
+      ref.read(uploadQueueProvider.notifier).addFiles(paths);
+    } catch (_) {
+      setState(() => _pickError = 'Couldn\'t open the file picker. Try again.');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final tasks = ref.watch(uploadQueueProvider);
     return _TabScaffold(
       title: 'My Drive',
-      child: SkeletonThenEmpty(
-        empty: EmptyState(
-          title: 'Your drive is empty',
-          subtitle: 'Upload a file to keep it in your Telegram cloud.',
-          action: FilledButton.tonalIcon(
-            onPressed: () {},
-            icon: const Icon(Iconsax.document_upload, size: 18),
-            label: const Text('Upload a file'),
-          ),
-        ),
-      ),
+      child: tasks.isEmpty && _pickError == null
+          ? SkeletonThenEmpty(
+              empty: EmptyState(
+                title: 'Your drive is empty',
+                subtitle: 'Upload a file to keep it in your Telegram cloud.',
+                action: FilledButton.tonalIcon(
+                  onPressed: _pickAndUpload,
+                  icon: const Icon(Iconsax.document_upload, size: 18),
+                  label: const Text('Upload a file'),
+                ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.only(bottom: AppSpace.section),
+              children: [
+                if (_pickError != null) ...[
+                  InlineError(message: _pickError!, onRetry: _pickAndUpload),
+                  const SizedBox(height: AppSpace.base),
+                ],
+                const UploadSection(),
+                const SizedBox(height: AppSpace.base),
+                Center(
+                  child: FilledButton.tonalIcon(
+                    onPressed: _pickAndUpload,
+                    icon: const Icon(Iconsax.document_upload, size: 18),
+                    label: const Text('Upload more files'),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -153,14 +201,22 @@ class _SettingsTab extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpace.base),
-          const SectionCard(
+          SectionCard(
             icon: Iconsax.driver,
             title: 'Storage',
-            padding: EdgeInsets.only(bottom: AppSpace.half),
+            padding: const EdgeInsets.only(bottom: AppSpace.half),
             child: IconBadgeRow(
               icon: Iconsax.folder_cloud,
-              title: 'Telegram cloud',
-              subtitle: 'Up to 2 GB per file · no storage cap',
+              title: 'Storage & limits',
+              subtitle:
+                  'Up to 2 GB per file · how SannDrive keeps your account safe',
+              trailing: Icon(Icons.chevron_right,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                    builder: (_) => const MobileStoragePage()),
+              ),
             ),
           ),
           const SizedBox(height: AppSpace.base),

@@ -115,7 +115,114 @@ class StorageView extends StatelessWidget {
             );
           },
         ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(32),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Storage & limits',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 6),
+              Text(
+                'How SannDrive uses your Telegram account — and keeps it in good standing.',
+                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 20),
+              const _LimitRow(
+                icon: Iconsax.document_upload,
+                title: 'Up to 2 GB per file',
+                body:
+                    '4 GB with Telegram Premium. There is no cap on total storage — upload as much as you like.',
+              ),
+              const _LimitRow(
+                icon: Iconsax.shield_tick,
+                title: 'Uploads are paced to protect your account',
+                body:
+                    'SannDrive uploads one file at a time with a short pause between files, and automatically slows down when Telegram asks (FLOOD_WAIT). This keeps your account in good standing.',
+              ),
+              const _LimitRow(
+                icon: Iconsax.warning_2,
+                title: 'Avoid mass-dumping files',
+                body:
+                    'Pushing thousands of files at once can still get an account temporarily limited. Add large libraries in smaller batches.',
+              ),
+              const _LimitRow(
+                icon: Iconsax.key,
+                title: 'This is your Telegram account, not a backup',
+                body:
+                    'Files live in your own Telegram account. If the account is lost or banned, the files go with it — keep copies of anything irreplaceable.',
+                last: true,
+              ),
+            ],
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _LimitRow extends StatelessWidget {
+  const _LimitRow({
+    required this.icon,
+    required this.title,
+    required this.body,
+    this.last = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(bottom: last ? 0 : 18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: scheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: scheme.onSecondaryContainer),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 3),
+                Text(
+                  body,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
