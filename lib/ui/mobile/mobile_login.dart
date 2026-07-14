@@ -5,6 +5,7 @@ import '../../shared/controllers/auth_controller.dart';
 import '../../shared/core/env.dart';
 import '../../shared/services/telegram/auth.dart';
 import '../../theme/app_theme.dart';
+import '../common/brand_mark.dart';
 
 class MobileLogin extends ConsumerStatefulWidget {
   const MobileLogin({super.key});
@@ -44,88 +45,82 @@ class _MobileLoginState extends ConsumerState<MobileLogin> {
       if (prev?.step != next.step) _field.clear();
     });
     final auth = ref.watch(authControllerProvider);
+    final scheme = Theme.of(context).colorScheme;
     final f = _fieldsFor(auth.step);
 
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _Brand(),
-                const SizedBox(height: 36),
-                Text(f.title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                Text(f.subtitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.muted, height: 1.4)),
-                const SizedBox(height: 28),
-                TextField(
-                  controller: _field,
-                  autofocus: true,
-                  obscureText: f.obscure,
-                  keyboardType: f.keyboard,
-                  onSubmitted: (_) => _submit(auth.step),
-                  decoration: InputDecoration(hintText: f.hint),
-                ),
-                if (auth.error != null) ...[
-                  const SizedBox(height: 14),
-                  Text(auth.error!,
-                      style: const TextStyle(
-                          color: AppColors.danger, fontSize: 13)),
-                ],
-                const SizedBox(height: 22),
-                FilledButton(
-                  onPressed: auth.busy ? null : () => _submit(auth.step),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: GridBackdrop()),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.page, vertical: 40),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 380),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(child: BrandMark(size: 68)),
+                      const SizedBox(height: AppSpace.base),
+                      Center(
+                        child: Text(Env.appName,
+                            style: AppText.wordmark(context, size: 22)),
+                      ),
+                      const SizedBox(height: 4),
+                      Center(
+                        child: Text(Env.tagline, style: AppText.meta(context)),
+                      ),
+                      const SizedBox(height: AppSpace.section),
+                      Text(f.title,
+                          textAlign: TextAlign.center,
+                          style: AppText.screenTitle(context)),
+                      const SizedBox(height: AppSpace.half),
+                      Text(f.subtitle,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              height: 1.5,
+                              color: scheme.onSurface.withOpacity(0.65))),
+                      const SizedBox(height: AppSpace.hero),
+                      TextField(
+                        controller: _field,
+                        autofocus: true,
+                        obscureText: f.obscure,
+                        keyboardType: f.keyboard,
+                        textAlign: TextAlign.center,
+                        onSubmitted: (_) => _submit(auth.step),
+                        decoration: InputDecoration(hintText: f.hint),
+                      ),
+                      if (auth.error != null) ...[
+                        const SizedBox(height: 14),
+                        Text(auth.error!,
+                            textAlign: TextAlign.center,
+                            style:
+                                TextStyle(color: scheme.error, fontSize: 13)),
+                      ],
+                      const SizedBox(height: AppSpace.hero),
+                      FilledButton.tonal(
+                        onPressed: auth.busy ? null : () => _submit(auth.step),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                        ),
+                        child: auth.busy
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : Text(f.action),
+                      ),
+                    ],
                   ),
-                  child: auth.busy
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text(f.action),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
-    );
-  }
-}
-
-class _Brand extends StatelessWidget {
-  const _Brand();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: const LinearGradient(
-                colors: [AppColors.accent, AppColors.accent2]),
-          ),
-          child: const Icon(Icons.cloud_rounded, color: Colors.white, size: 32),
-        ),
-        const SizedBox(height: 14),
-        const Text(Env.appName,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        const Text(Env.tagline, style: TextStyle(color: AppColors.muted)),
-      ],
     );
   }
 }

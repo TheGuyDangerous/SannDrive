@@ -6,6 +6,7 @@ import 'shared/core/env.dart';
 import 'shared/core/form_factor.dart';
 import 'shared/services/telegram/auth.dart';
 import 'theme/app_theme.dart';
+import 'ui/common/brand_mark.dart';
 import 'ui/desktop/desktop_home.dart';
 import 'ui/desktop/desktop_login.dart';
 import 'ui/mobile/mobile_home.dart';
@@ -33,12 +34,17 @@ class RootGate extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider);
     final desktop = isDesktopPlatform;
 
+    final Widget child;
     if (auth.step == AuthStep.initial) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      child = const Scaffold(body: Center(child: PulsingBrandMark()));
+    } else if (auth.authenticated) {
+      child = desktop ? const DesktopHome() : const MobileHome();
+    } else {
+      child = desktop ? const DesktopLogin() : const MobileLogin();
     }
-    if (auth.authenticated) {
-      return desktop ? const DesktopHome() : const MobileHome();
-    }
-    return desktop ? const DesktopLogin() : const MobileLogin();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: child,
+    );
   }
 }
