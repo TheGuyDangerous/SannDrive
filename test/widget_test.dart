@@ -7,5 +7,7 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: SannDriveApp()));
     await tester.pump();
     expect(find.byType(SannDriveApp), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
   });
 }
