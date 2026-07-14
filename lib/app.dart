@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'shared/controllers/auth_controller.dart';
+import 'shared/controllers/setup_controller.dart';
 import 'shared/core/env.dart';
 import 'shared/core/form_factor.dart';
 import 'shared/services/telegram/auth.dart';
@@ -9,8 +10,10 @@ import 'theme/app_theme.dart';
 import 'ui/common/brand_mark.dart';
 import 'ui/desktop/desktop_home.dart';
 import 'ui/desktop/desktop_login.dart';
+import 'ui/desktop/desktop_onboarding.dart';
 import 'ui/mobile/mobile_home.dart';
 import 'ui/mobile/mobile_login.dart';
+import 'ui/mobile/mobile_onboarding.dart';
 
 class SannDriveApp extends StatelessWidget {
   const SannDriveApp({super.key});
@@ -31,16 +34,37 @@ class RootGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
+    ref.listen(setupControllerProvider.select((s) => s.notice), (prev, next) {
+      if (next == null || next == prev) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(next),
+          duration: const Duration(seconds: 5),
+        ));
+      });
+    });
+
+    final setup = ref.watch(setupControllerProvider);
     final desktop = isDesktopPlatform;
 
     final Widget child;
-    if (auth.step == AuthStep.initial) {
-      child = const Scaffold(body: Center(child: PulsingBrandMark()));
-    } else if (auth.authenticated) {
-      child = desktop ? const DesktopHome() : const MobileHome();
-    } else {
-      child = desktop ? const DesktopLogin() : const MobileLogin();
+    switch (setup.mode) {
+      case EngineMode.loading:
+        child = const Scaffold(body: Center(child: PulsingBrandMark()));
+      case EngineMode.onboarding:
+        child =
+            desktop ? const DesktopOnboarding() : const MobileOnboarding();
+      case EngineMode.demo:
+      case EngineMode.real:
+        final auth = ref.watch(authControllerProvider);
+        if (auth.step == AuthStep.initial) {
+          child = const Scaffold(body: Center(child: PulsingBrandMark()));
+        } else if (auth.authenticated) {
+          child = desktop ? const DesktopHome() : const MobileHome();
+        } else {
+          child = desktop ? const DesktopLogin() : const MobileLogin();
+        }
     }
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),

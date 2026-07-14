@@ -29,28 +29,32 @@ class FakeTgClient implements TgClient {
   @override
   Stream<AuthStep> get authSteps => _controller.stream;
 
+  void _emit(AuthStep step) {
+    if (!_controller.isClosed) _controller.add(step);
+  }
+
   @override
   Future<void> initialize() async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    _controller.add(AuthStep.waitPhone);
+    _emit(AuthStep.waitPhone);
   }
 
   @override
   Future<void> setPhone(String phone) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    _controller.add(AuthStep.waitCode);
+    _emit(AuthStep.waitCode);
   }
 
   @override
   Future<void> checkCode(String code) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    _controller.add(code.trim() == '22222' ? AuthStep.waitPassword : AuthStep.ready);
+    _emit(code.trim() == '22222' ? AuthStep.waitPassword : AuthStep.ready);
   }
 
   @override
   Future<void> checkPassword(String password) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    _controller.add(AuthStep.ready);
+    _emit(AuthStep.ready);
   }
 
   @override
@@ -73,9 +77,9 @@ class FakeTgClient implements TgClient {
 
   @override
   Future<void> logOut() async {
-    _controller.add(AuthStep.loggingOut);
+    _emit(AuthStep.loggingOut);
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    _controller.add(AuthStep.waitPhone);
+    _emit(AuthStep.waitPhone);
   }
 
   @override

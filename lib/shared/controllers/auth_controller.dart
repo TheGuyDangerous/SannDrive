@@ -3,9 +3,27 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/telegram/auth.dart';
+import '../services/telegram/real_tg_client.dart';
+import '../services/telegram/tdlib_ffi.dart';
 import '../services/telegram/tg_client.dart';
+import 'setup_controller.dart';
 
 final tgClientProvider = Provider<TgClient>((ref) {
+  final mode = ref.watch(setupControllerProvider.select((s) => s.mode));
+  final creds =
+      ref.watch(setupControllerProvider.select((s) => s.credentials));
+
+  if (mode == EngineMode.real && creds != null) {
+    try {
+      final client = RealTgClient(credentials: creds);
+      ref.onDispose(client.dispose);
+      return client;
+    } on TdlibUnavailable {
+      Future.microtask(
+          ref.read(setupControllerProvider.notifier).noteEngineUnavailable);
+    }
+  }
+
   final client = FakeTgClient();
   ref.onDispose(client.dispose);
   return client;
@@ -24,7 +42,9 @@ class AuthController extends StateNotifier<AuthState> {
     _sub = _client.authSteps.listen((step) {
       state = state.copyWith(step: step, busy: false, clearError: true);
     });
-    _client.initialize();
+    _client.initialize().catchError((Object e) {
+      if (mounted) state = state.copyWith(busy: false, error: e.toString());
+    });
   }
 
   Future<void> submitPhone(String phone) =>
