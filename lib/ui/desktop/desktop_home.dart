@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:iconsax/iconsax.dart';
 
 import '../../shared/controllers/auth_controller.dart';
+import '../../shared/controllers/drive_controller.dart';
 import '../../shared/models/drive_item.dart';
 import '../../shared/services/upload/upload_queue.dart';
 import '../../theme/desktop_theme.dart';
@@ -26,9 +27,6 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
   int _section = 0;
   bool _dark = true;
   bool _grid = false;
-  int _sortField = 0;
-  bool _sortAsc = true;
-  List<String> _path = const [];
   final Set<String> _selected = {};
   int? _anchor;
   bool _dragging = false;
@@ -56,20 +54,16 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
     super.dispose();
   }
 
-  List<DriveItem> get _visible {
-    final src = _section == 1 ? DriveStub.recent : DriveStub.itemsIn(_path);
-    final items = [...src];
-    items.sort((a, b) {
-      if (a.isFolder != b.isFolder) return a.isFolder ? -1 : 1;
-      final c = switch (_sortField) {
-        1 => a.size.compareTo(b.size),
-        2 => a.modified.compareTo(b.modified),
-        _ => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      };
-      return _sortAsc ? c : -c;
-    });
-    return items;
+  List<DriveItem> _itemsOf(DriveState drive) {
+    if (!drive.searching && _section == 1) {
+      return sortDriveItems(drive.recent, drive.sortField, drive.sortAsc);
+    }
+    return drive.visible;
   }
+
+  List<DriveItem> get _visible => _itemsOf(ref.read(driveControllerProvider));
+
+  DriveController get _drive => ref.read(driveControllerProvider.notifier);
 
   void _select(int index, DriveItem item) {
     final keys = HardwareKeyboard.instance;
@@ -116,8 +110,9 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
 
   void _open(DriveItem item) {
     if (item.isFolder && _section == 0) {
+      _drive.open(item.id);
+      _searchCtrl.clear();
       setState(() {
-        _path = [..._path, item.name];
         _selected.clear();
         _anchor = null;
       });
@@ -125,12 +120,23 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
   }
 
   void _goUp() {
-    if (_path.isEmpty) return;
+    if (ref.read(driveControllerProvider).stack.length <= 1) return;
+    _drive.up();
+    _searchCtrl.clear();
     setState(() {
-      _path = _path.sublist(0, _path.length - 1);
       _selected.clear();
       _anchor = null;
     });
+  }
+
+  void _openSelected() {
+    if (_selected.length != 1) return;
+    for (final it in _visible) {
+      if (it.id == _selected.first) {
+        _open(it);
+        return;
+      }
+    }
   }
 
   void _selectAll() => setState(() {
@@ -152,7 +158,66 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
         if (f.path != null) f.path!
     ];
     if (paths.isEmpty) return;
-    ref.read(uploadQueueProvider.notifier).addFiles(paths);
+    ref.read(uploadQueueProvider.notifier).addFiles(paths,
+        parentId: ref.read(driveControllerProvider).folderId);
+  }
+
+  Future<String?> _promptName(String title, String confirm,
+      {String initial = ''}) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => Theme(
+        data: _dark ? DesktopTheme.dark : DesktopTheme.light,
+        child: _NameDialog(title: title, confirm: confirm, initial: initial),
+      ),
+    );
+    final trimmed = name?.trim() ?? '';
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  Future<void> _createFolder() async {
+    final name = await _promptName('New folder', 'Create');
+    if (name == null) return;
+    await _drive.createFolder(name);
+  }
+
+  Future<void> _renameSelected() async {
+    if (_selected.length != 1) return;
+    DriveItem? item;
+    for (final it in _visible) {
+      if (it.id == _selected.first) {
+        item = it;
+        break;
+      }
+    }
+    if (item == null) return;
+    final name =
+        await _promptName('Rename', 'Rename', initial: item.name);
+    if (name == null || name == item.name) return;
+    await _drive.rename(item.id, name);
+  }
+
+  Future<void> _deleteSelected() async {
+    final ids = [..._selected];
+    setState(() {
+      _selected.clear();
+      _anchor = null;
+    });
+    for (final id in ids) {
+      await _drive.delete(id);
+    }
+  }
+
+  Future<void> _downloadSelected() async {
+    final dir = await FilePicker.platform
+        .getDirectoryPath(dialogTitle: 'Choose where to save');
+    if (dir == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+            'Downloads arrive once you\'re connected to Telegram — nothing was saved yet.'),
+      ),
+    );
   }
 
   ColorScheme get _scheme =>
@@ -194,13 +259,15 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
         _menuItem('delete', Iconsax.trash, 'Delete', scheme),
       ],
     );
-    if (action == 'open' && _selected.length == 1) {
-      for (final it in _visible) {
-        if (it.id == _selected.first) {
-          _open(it);
-          break;
-        }
-      }
+    switch (action) {
+      case 'open':
+        _openSelected();
+      case 'rename':
+        await _renameSelected();
+      case 'delete':
+        await _deleteSelected();
+      case 'download':
+        await _downloadSelected();
     }
   }
 
@@ -274,9 +341,9 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
           onDragExited: (_) => setState(() => _dragging = false),
           onDragDone: (detail) {
             setState(() => _dragging = false);
-            ref
-                .read(uploadQueueProvider.notifier)
-                .addFiles([for (final f in detail.files) f.path]);
+            ref.read(uploadQueueProvider.notifier).addFiles(
+                [for (final f in detail.files) f.path],
+                parentId: ref.read(driveControllerProvider).folderId);
           },
           child: Stack(
             children: [
@@ -367,6 +434,13 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
                     controller: _searchCtrl,
                     focusNode: _searchFocus,
                     style: text.bodyMedium,
+                    onChanged: (v) {
+                      _drive.setQuery(v);
+                      setState(() {
+                        _selected.clear();
+                        _anchor = null;
+                      });
+                    },
                     decoration: InputDecoration(
                       isDense: true,
                       hintText: 'Search… (Ctrl+K)',
@@ -424,7 +498,7 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
 
   Widget _breadcrumb(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final segs = ['My Drive', ..._path];
+    final segs = ref.watch(driveControllerProvider).stack;
     return SizedBox(
       height: 44,
       child: Padding(
@@ -434,7 +508,7 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
             IconButton(
               tooltip: 'Up',
               visualDensity: VisualDensity.compact,
-              onPressed: _path.isEmpty ? null : _goUp,
+              onPressed: segs.length <= 1 ? null : _goUp,
               icon: const Icon(Iconsax.arrow_up_2, size: 18),
             ),
             const SizedBox(width: 4),
@@ -443,11 +517,14 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
                 Icon(Icons.chevron_right,
                     size: 16, color: scheme.onSurfaceVariant),
               TextButton(
-                onPressed: () => setState(() {
-                  _path = _path.sublist(0, i);
-                  _selected.clear();
-                  _anchor = null;
-                }),
+                onPressed: () {
+                  _drive.navigateTo(i);
+                  _searchCtrl.clear();
+                  setState(() {
+                    _selected.clear();
+                    _anchor = null;
+                  });
+                },
                 style: TextButton.styleFrom(
                   backgroundColor: i == segs.length - 1
                       ? scheme.surfaceContainerHigh
@@ -460,7 +537,7 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
                   textStyle: GoogleFonts.rubik(
                       fontSize: 13.5, fontWeight: FontWeight.w500),
                 ),
-                child: Text(segs[i]),
+                child: Text(segs[i].name),
               ),
             ],
           ],
@@ -510,7 +587,8 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
               _menuButton(scheme, Iconsax.document_upload, 'Upload files',
                   onPressed: _pickAndUpload),
               _menuButton(scheme, Iconsax.folder_open, 'Upload folder'),
-              _menuButton(scheme, Iconsax.folder_add, 'New folder'),
+              _menuButton(scheme, Iconsax.folder_add, 'New folder',
+                  onPressed: _createFolder),
             ],
           ),
           const SizedBox(width: 8),
@@ -539,7 +617,8 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
               onPressed: () =>
                   controller.isOpen ? controller.close() : controller.open(),
               icon: const Icon(Iconsax.sort, size: 16),
-              label: Text(_sortLabels[_sortField]),
+              label: Text(_sortLabels[
+                  ref.watch(driveControllerProvider).sortField.index]),
               style: OutlinedButton.styleFrom(
                 visualDensity: VisualDensity.compact,
                 foregroundColor: scheme.onSurfaceVariant,
@@ -553,18 +632,14 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
               for (var i = 0; i < _sortLabels.length; i++)
                 _menuButton(
                   scheme,
-                  i == _sortField
-                      ? (_sortAsc ? Icons.arrow_upward : Icons.arrow_downward)
+                  i == ref.watch(driveControllerProvider).sortField.index
+                      ? (ref.watch(driveControllerProvider).sortAsc
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward)
                       : Icons.sort,
                   _sortLabels[i],
-                  onPressed: () => setState(() {
-                    if (_sortField == i) {
-                      _sortAsc = !_sortAsc;
-                    } else {
-                      _sortField = i;
-                      _sortAsc = true;
-                    }
-                  }),
+                  onPressed: () =>
+                      _drive.setSort(DriveSortField.values[i]),
                 ),
             ],
           ),
@@ -582,6 +657,42 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
       default:
         return _fileArea(context);
     }
+  }
+
+  Widget _emptyDrive(BuildContext context, DriveState drive) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Icon(
+                drive.searching ? Iconsax.search_normal_1 : Iconsax.folder_open,
+                size: 30,
+                color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          Text(drive.searching ? 'No matches' : 'Nothing to show',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          Text(
+            drive.searching
+                ? 'Nothing in your drive matches "${drive.query.trim()}".'
+                : 'Drop files here or use Add to fill this folder.',
+            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _emptyShared(BuildContext context) {
@@ -617,13 +728,17 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
   }
 
   Widget _fileArea(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final items = _visible;
+    final drive = ref.watch(driveControllerProvider);
+    final items = _itemsOf(drive);
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyA, control: true):
             _selectAll,
         const SingleActivator(LogicalKeyboardKey.escape): _clearSelection,
+        const SingleActivator(LogicalKeyboardKey.enter): _openSelected,
+        const SingleActivator(LogicalKeyboardKey.backspace): () {
+          if (_section == 0 && !drive.searching) _goUp();
+        },
       },
       child: Focus(
         focusNode: _viewFocus,
@@ -635,13 +750,9 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
             _clearSelection();
           },
           child: items.isEmpty
-              ? Center(
-                  child: Text(
-                    'This folder is empty',
-                    style:
-                        TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-                  ),
-                )
+              ? (drive.loading
+                  ? const SizedBox.shrink()
+                  : _emptyDrive(context, drive))
               : _grid
                   ? _FileGrid(
                       items: items,
@@ -657,6 +768,65 @@ class _DesktopHomeState extends ConsumerState<DesktopHome> {
                     ),
         ),
       ),
+    );
+  }
+}
+
+class _NameDialog extends StatefulWidget {
+  const _NameDialog({
+    required this.title,
+    required this.confirm,
+    required this.initial,
+  });
+
+  final String title;
+  final String confirm;
+  final String initial;
+
+  @override
+  State<_NameDialog> createState() => _NameDialogState();
+}
+
+class _NameDialogState extends State<_NameDialog> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      backgroundColor: scheme.surfaceContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      title: Text(widget.title,
+          style: GoogleFonts.rubik(fontSize: 17, fontWeight: FontWeight.w500)),
+      content: SizedBox(
+        width: 340,
+        child: TextField(
+          controller: _ctrl,
+          autofocus: true,
+          style: GoogleFonts.rubik(fontSize: 14),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_ctrl.text),
+          child: Text(widget.confirm),
+        ),
+      ],
     );
   }
 }
