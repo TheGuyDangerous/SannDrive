@@ -4,12 +4,21 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../controllers/auth_controller.dart';
+import '../../controllers/drive_controller.dart';
 import '../../models/upload_item.dart';
 import '../telegram/tg_client.dart';
 
 final uploadQueueProvider =
     StateNotifierProvider<UploadQueue, List<UploadTask>>((ref) {
-  return UploadQueue(ref.watch(tgClientProvider));
+  return UploadQueue(
+    ref.watch(tgClientProvider),
+    onCompleted: (task) =>
+        ref.read(driveControllerProvider.notifier).addUploaded(
+              name: task.name,
+              sizeBytes: task.sizeBytes,
+              parentId: task.parentId,
+            ),
+  );
 });
 
 class _Canceled {
@@ -29,12 +38,15 @@ class UploadQueue extends StateNotifier<List<UploadTask>> {
     this._client, {
     this.minStartGap = const Duration(milliseconds: 1200),
     int Function(String path)? sizeOf,
+    void Function(UploadTask task)? onCompleted,
   })  : _sizeOf = sizeOf ?? _fileSize,
+        _onCompleted = onCompleted,
         super(const []);
 
   final TgClient _client;
   final Duration minStartGap;
   final int Function(String path) _sizeOf;
+  final void Function(UploadTask task)? _onCompleted;
 
   int _seq = 0;
   bool _pumping = false;
@@ -59,7 +71,7 @@ class UploadQueue extends StateNotifier<List<UploadTask>> {
     return left.isNegative ? Duration.zero : left;
   }
 
-  void addFiles(List<String> paths) {
+  void addFiles(List<String> paths, {String? parentId}) {
     if (paths.isEmpty) return;
     state = [
       ...state,
@@ -69,6 +81,7 @@ class UploadQueue extends StateNotifier<List<UploadTask>> {
           name: p.split(RegExp(r'[\\/]')).last,
           path: p,
           sizeBytes: _sizeOf(p),
+          parentId: parentId,
         ),
     ];
     _pump();
@@ -187,6 +200,12 @@ class UploadQueue extends StateNotifier<List<UploadTask>> {
     if (result == null) {
       _update(task.id,
           (t) => t.copyWith(status: UploadStatus.done, sentBytes: t.sizeBytes));
+      for (final t in state) {
+        if (t.id == task.id && t.status == UploadStatus.done) {
+          _onCompleted?.call(t);
+          break;
+        }
+      }
     } else if (result is _Canceled) {
       _update(task.id, (t) => t.copyWith(status: UploadStatus.canceled));
     } else if (result is FloodWaitException) {

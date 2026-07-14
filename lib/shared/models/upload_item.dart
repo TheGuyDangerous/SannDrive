@@ -33,6 +33,7 @@ class UploadTask {
   final UploadStatus status;
   final String? error;
   final int? floodWaitUntilEpochMs;
+  final String? parentId;
 
   const UploadTask({
     required this.id,
@@ -43,6 +44,7 @@ class UploadTask {
     this.status = UploadStatus.queued,
     this.error,
     this.floodWaitUntilEpochMs,
+    this.parentId,
   });
 
   double get progress {
@@ -76,6 +78,7 @@ class UploadTask {
       floodWaitUntilEpochMs: clearFloodWait
           ? null
           : (floodWaitUntilEpochMs ?? this.floodWaitUntilEpochMs),
+      parentId: parentId,
     );
   }
 }
