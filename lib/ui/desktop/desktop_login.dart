@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:iconsax/iconsax.dart';
 
 import '../../shared/controllers/auth_controller.dart';
-import '../../shared/core/env.dart';
 import '../../shared/services/telegram/auth.dart';
-import '../../theme/app_theme.dart';
-import '../common/brand_mark.dart';
+import '../../theme/desktop_theme.dart';
 
 class DesktopLogin extends ConsumerStatefulWidget {
   const DesktopLogin({super.key});
@@ -46,121 +44,99 @@ class _DesktopLoginState extends ConsumerState<DesktopLogin> {
       if (prev?.step != next.step) _field.clear();
     });
     final auth = ref.watch(authControllerProvider);
-    final scheme = Theme.of(context).colorScheme;
     final p = _promptFor(auth.step);
 
-    return Scaffold(
-      body: Row(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Stack(
-              children: [
-                const Positioned.fill(child: GridBackdrop()),
-                Padding(
-                  padding: const EdgeInsets.all(56),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const BrandMark(size: 44),
-                          const SizedBox(width: 12),
-                          Text(Env.appName,
-                              style: AppText.wordmark(context, size: 22)),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpace.section),
-                      Text('Unlimited cloud,\nyours by design.',
-                          style: GoogleFonts.raleway(
-                              fontSize: 40,
-                              height: 1.15,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: AppSpace.base),
-                      SizedBox(
-                        width: 400,
-                        child: Text(
-                          'SannDrive keeps your files in your own Telegram cloud — up to 2 GB each, no storage cap, no middleman.',
-                          style: TextStyle(
-                              color: scheme.onSurface.withOpacity(0.65),
-                              fontSize: 15,
-                              height: 1.5),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpace.hero),
-                      const Wrap(
-                        spacing: AppSpace.half,
-                        runSpacing: AppSpace.half,
-                        children: [
-                          Chip(label: Text('2 GB per file')),
-                          Chip(label: Text('No storage cap')),
-                          Chip(label: Text('Yours end to end')),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(width: 1, color: scheme.outlineVariant),
-          Expanded(
-            flex: 4,
+    return Theme(
+      data: DesktopTheme.dark,
+      child: Builder(builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
+        final text = Theme.of(context).textTheme;
+        return Scaffold(
+          body: Center(
             child: Container(
-              color: scheme.surfaceContainer,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 380),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(p.title, style: AppText.screenTitle(context)),
-                      const SizedBox(height: AppSpace.half),
-                      Text(p.subtitle,
-                          style: TextStyle(
-                              height: 1.5,
-                              color: scheme.onSurface.withOpacity(0.65))),
-                      const SizedBox(height: AppSpace.hero),
-                      TextField(
-                        controller: _field,
-                        autofocus: true,
-                        obscureText: p.obscure,
-                        onSubmitted: (_) => _submit(auth.step),
-                        decoration: InputDecoration(
-                          hintText: p.hint,
-                          fillColor: scheme.surfaceContainerHighest,
-                        ),
+              width: 420,
+              padding: const EdgeInsets.fromLTRB(36, 40, 36, 36),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                      if (auth.error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(auth.error!,
-                            style:
-                                TextStyle(color: scheme.error, fontSize: 13)),
-                      ],
-                      const SizedBox(height: AppSpace.page),
-                      FilledButton.tonal(
-                        onPressed: auth.busy ? null : () => _submit(auth.step),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(50),
-                        ),
-                        child: auth.busy
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2))
-                            : Text(p.action),
-                      ),
-                    ],
+                      child:
+                          Icon(Iconsax.cloud, size: 30, color: scheme.primary),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  Center(
+                    child: Text(
+                      'SannDrive',
+                      style: text.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: Text(
+                      p.subtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        height: 1.5,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    p.title,
+                    style:
+                        text.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _field,
+                    autofocus: true,
+                    obscureText: p.obscure,
+                    onSubmitted: (_) => _submit(auth.step),
+                    decoration: InputDecoration(hintText: p.hint),
+                  ),
+                  if (auth.error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      auth.error!,
+                      style: TextStyle(color: scheme.error, fontSize: 13),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: auth.busy ? null : () => _submit(auth.step),
+                    style:
+                        FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    child: auth.busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(p.action),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        );
+      }),
     );
   }
 }
@@ -182,8 +158,10 @@ _Prompt _promptFor(AuthStep step) {
           'Your account has a cloud password enabled.', 'Password', 'Unlock',
           obscure: true);
     default:
-      return const _Prompt('Sign in to SannDrive',
-          'Enter your Telegram phone number to begin.', '+91 98765 43210',
+      return const _Prompt(
+          'Sign in with Telegram',
+          'Your files live in your own Telegram cloud.\nEnter your phone number to begin.',
+          '+91 98765 43210',
           'Send code');
   }
 }
