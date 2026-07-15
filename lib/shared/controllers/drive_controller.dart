@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/drive_item.dart';
 import '../services/index/drive_index.dart';
+import 'setup_controller.dart';
 
 enum DriveSortField { name, size, modified }
 
@@ -87,7 +88,9 @@ final driveIndexProvider = Provider<DriveIndex>((ref) {
 
 final driveControllerProvider =
     StateNotifierProvider<DriveController, DriveState>((ref) {
-  return DriveController(ref.watch(driveIndexProvider));
+  final real = ref.watch(
+      setupControllerProvider.select((s) => s.mode == EngineMode.real));
+  return DriveController(ref.watch(driveIndexProvider), seed: !real);
 });
 
 class DriveController extends StateNotifier<DriveState> {
@@ -192,6 +195,14 @@ class DriveController extends StateNotifier<DriveState> {
 
   Future<void> delete(String id) async {
     await _index.delete(id);
+    await _refresh();
+  }
+
+  Future<void> importRemote(List<DriveItem> items) async {
+    if (items.isEmpty) return;
+    for (final item in items) {
+      await _index.insert(item);
+    }
     await _refresh();
   }
 

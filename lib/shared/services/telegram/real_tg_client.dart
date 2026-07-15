@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../models/drive_item.dart';
 import 'auth.dart';
 import 'credentials.dart';
 import 'tdlib_ffi.dart';
@@ -35,6 +36,54 @@ AuthStep? mapAuthorizationState(String type) {
     default:
       return null;
   }
+}
+
+const sannDriveCaptionPrefix = '#sanndrive';
+
+String? sannDriveCaptionTag(Map<String, dynamic> content) {
+  final caption =
+      (content['caption'] as Map<String, dynamic>?)?['text'] as String?;
+  if (caption == null) return null;
+  for (final line in caption.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith(sannDriveCaptionPrefix)) return trimmed;
+  }
+  return null;
+}
+
+DriveItem? driveItemFromMessage(Map<String, dynamic> message) {
+  final content = message['content'];
+  if (content is! Map<String, dynamic>) return null;
+  if (content['@type'] != 'messageDocument') return null;
+  final doc = content['document'];
+  if (doc is! Map<String, dynamic>) return null;
+  final messageId = (message['id'] as num?)?.toInt();
+  if (messageId == null) return null;
+
+  var name = (doc['file_name'] as String?)?.trim() ?? '';
+  final tag = sannDriveCaptionTag(content);
+  if (tag != null) {
+    final tagged = tag.substring(sannDriveCaptionPrefix.length).trim();
+    if (tagged.isNotEmpty) name = tagged;
+  }
+  if (name.isEmpty) name = 'Document $messageId';
+
+  final file = doc['document'] as Map<String, dynamic>?;
+  var size = (file?['size'] as num?)?.toInt() ?? 0;
+  if (size <= 0) size = (file?['expected_size'] as num?)?.toInt() ?? 0;
+  final date = (message['date'] as num?)?.toInt() ?? 0;
+
+  return DriveItem(
+    id: 'tg-$messageId',
+    name: name,
+    size: size < 0 ? 0 : size,
+    modified: date > 0
+        ? DateTime.fromMillisecondsSinceEpoch(date * 1000)
+        : DateTime.now(),
+    ext: extOf(name),
+    tgMessageId: messageId,
+    captionTag: tag,
+  );
 }
 
 Exception tdErrorToException(Map<String, dynamic> err) {
@@ -303,25 +352,47 @@ class RealTgClient implements TgClient {
     pending.controller.close();
   }
 
-  // TODO(pass 2): feed this into the local drive index once the native
-  // library ships, so the drive view reflects what is really in Telegram.
-  Future<List<Map<String, dynamic>>> listDocuments({int limit = 100}) async {
+  Future<List<Map<String, dynamic>>> listDocuments({int max = 500}) async {
     final chatId = await _savedMessagesChatId();
-    final found = await _request({
-      '@type': 'searchChatMessages',
-      'chat_id': chatId,
-      'query': '',
-      'from_message_id': 0,
-      'offset': 0,
-      'limit': limit,
-      'filter': {'@type': 'searchMessagesFilterDocument'},
-    });
-    final messages = found['messages'];
-    if (messages is! List) return const [];
-    return [
-      for (final m in messages)
-        if (m is Map<String, dynamic>) m,
-    ];
+    final out = <Map<String, dynamic>>[];
+    var from = 0;
+    while (out.length < max) {
+      final found = await _request({
+        '@type': 'searchChatMessages',
+        'chat_id': chatId,
+        'query': '',
+        'from_message_id': from,
+        'offset': 0,
+        'limit': 100,
+        'filter': {'@type': 'searchMessagesFilterDocument'},
+      });
+      final messages = found['messages'];
+      if (messages is! List || messages.isEmpty) break;
+      for (final m in messages) {
+        if (m is Map<String, dynamic>) out.add(m);
+      }
+      var next = (found['next_from_message_id'] as num?)?.toInt() ?? 0;
+      if (next == 0) {
+        final last = messages.last;
+        next = last is Map<String, dynamic>
+            ? (last['id'] as num?)?.toInt() ?? 0
+            : 0;
+        if (next == from) break;
+      }
+      if (next == 0) break;
+      from = next;
+    }
+    return out;
+  }
+
+  Future<List<DriveItem>> fetchDriveItems() async {
+    final messages = await listDocuments();
+    final items = <DriveItem>[];
+    for (final message in messages) {
+      final item = driveItemFromMessage(message);
+      if (item != null) items.add(item);
+    }
+    return items;
   }
 
   @override

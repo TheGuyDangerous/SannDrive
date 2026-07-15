@@ -6,6 +6,7 @@ import '../services/telegram/auth.dart';
 import '../services/telegram/real_tg_client.dart';
 import '../services/telegram/tdlib_ffi.dart';
 import '../services/telegram/tg_client.dart';
+import 'drive_controller.dart';
 import 'setup_controller.dart';
 
 final tgClientProvider = Provider<TgClient>((ref) {
@@ -31,16 +32,34 @@ final tgClientProvider = Provider<TgClient>((ref) {
 
 final authControllerProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {
-  return AuthController(ref.watch(tgClientProvider));
+  final client = ref.watch(tgClientProvider);
+  return AuthController(
+    client,
+    onReady: client is! RealTgClient
+        ? null
+        : () async {
+            try {
+              final items = await client.fetchDriveItems();
+              await ref
+                  .read(driveControllerProvider.notifier)
+                  .importRemote(items);
+            } catch (_) {}
+          },
+  );
 });
 
 class AuthController extends StateNotifier<AuthState> {
   final TgClient _client;
+  final void Function()? _onReady;
   late final StreamSubscription<AuthStep> _sub;
 
-  AuthController(this._client) : super(const AuthState()) {
+  AuthController(this._client, {void Function()? onReady})
+      : _onReady = onReady,
+        super(const AuthState()) {
     _sub = _client.authSteps.listen((step) {
+      final wasReady = state.step == AuthStep.ready;
       state = state.copyWith(step: step, busy: false, clearError: true);
+      if (step == AuthStep.ready && !wasReady) _onReady?.call();
     });
     _client.initialize().catchError((Object e) {
       if (mounted) state = state.copyWith(busy: false, error: e.toString());
