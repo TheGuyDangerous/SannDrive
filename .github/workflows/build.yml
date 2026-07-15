@@ -92,10 +92,21 @@ jobs:
       - run: flutter build windows --release
       - name: Package Windows build
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath SannDrive-windows-x64.zip
+      - name: Build Windows installer
+        continue-on-error: true
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { $iscc = "iscc" }
+          & $iscc windows\installer\sanndrive.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item dist\windows\SannDrive-Setup.exe SannDrive-Setup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: SannDrive-windows-x64.zip
+          path: |
+            SannDrive-windows-x64.zip
+            SannDrive-Setup.exe
           if-no-files-found: error
 
   release:
@@ -111,7 +122,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest dist/android/*.apk dist/windows/*.zip \
+          assets=(dist/android/*.apk dist/windows/*.zip)
+          if [ -f dist/windows/SannDrive-Setup.exe ]; then
+            assets+=(dist/windows/SannDrive-Setup.exe)
+          fi
+          gh release create latest "${assets[@]}" \
             --prerelease --target "${GITHUB_SHA}" \
             --title "Latest build" \
-            --notes "Automatic build from ${GITHUB_SHA} on ${GITHUB_REF_NAME}. Android debug APKs (per ABI) and a portable Windows x64 zip. A signed installer will replace the zip in a later milestone."
+            --notes "Automatic build from ${GITHUB_SHA} on ${GITHUB_REF_NAME}. Android debug APKs (per ABI), a portable Windows x64 zip and a Windows installer (SannDrive-Setup.exe) when available."
