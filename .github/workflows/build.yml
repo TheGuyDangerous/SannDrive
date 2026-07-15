@@ -14,6 +14,8 @@ concurrency:
 
 env:
   FLUTTER_VERSION: 3.24.3
+  TDLIB_WINDOWS_URL: https://github.com/ForNeVeR/tdlib.native/releases/download/v1.8.64.1/tdlib.native.windows.x86-64.zip
+  TDLIB_ANDROID_URL: https://github.com/up9cloud/android-libtdjson/releases/download/v1.8.65/jniLibs.tar.gz
 
 jobs:
   analyze:
@@ -43,6 +45,19 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Fetch TDLib for Android
+        run: |
+          set -euo pipefail
+          if [ -f android/app/src/main/jniLibs/arm64-v8a/libtdjson.so ]; then
+            echo "libtdjson.so already in the tree, skipping download"
+            exit 0
+          fi
+          curl -fSL "$TDLIB_ANDROID_URL" -o /tmp/jniLibs.tar.gz
+          tar -xzf /tmp/jniLibs.tar.gz -C /tmp
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            mkdir -p "android/app/src/main/jniLibs/$abi"
+            cp "/tmp/jniLibs/$abi/libtdjson.so" "android/app/src/main/jniLibs/$abi/"
+          done
       - run: flutter build apk --debug --split-per-abi
       - uses: actions/upload-artifact@v4
         with:
@@ -61,6 +76,19 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Fetch TDLib for Windows
+        run: |
+          if (Test-Path windows/tdlib/tdjson.dll) {
+            Write-Host "tdjson.dll already in the tree, skipping download"
+            exit 0
+          }
+          Invoke-WebRequest -Uri $env:TDLIB_WINDOWS_URL -OutFile tdlib-win.zip
+          Expand-Archive tdlib-win.zip -DestinationPath tdlib-win
+          New-Item -ItemType Directory -Force windows/tdlib | Out-Null
+          Copy-Item tdlib-win/*.dll windows/tdlib/
+          if (-not (Test-Path windows/tdlib/tdjson.dll)) {
+            throw "tdjson.dll missing after download"
+          }
       - run: flutter build windows --release
       - name: Package Windows build
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath SannDrive-windows-x64.zip
