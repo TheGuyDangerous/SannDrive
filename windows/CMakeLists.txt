@@ -87,6 +87,14 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# TDLib runtime libraries, bundled next to the executable when present.
+file(GLOB TDLIB_BINARIES "${CMAKE_CURRENT_SOURCE_DIR}/tdlib/*.dll")
+if(TDLIB_BINARIES)
+  install(FILES ${TDLIB_BINARIES}
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
